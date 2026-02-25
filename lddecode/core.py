@@ -2452,38 +2452,54 @@ class Field:
 
         return linelocs
 
+    def _computewow_linear(self, expected_linelocs, actual_linelocs, scaled_pixel_locs):
+        """Fast path for the default linear wow model."""
+        interpolated_pixel_locs = np.interp(
+            scaled_pixel_locs,
+            expected_linelocs,
+            actual_linelocs,
+        )
+
+        slopes = np.diff(actual_linelocs) / self.inlinelen
+        segment_idx = np.searchsorted(expected_linelocs[1:], scaled_pixel_locs, side="right")
+        segment_idx = np.clip(segment_idx, 0, slopes.shape[0] - 1)
+
+        return interpolated_pixel_locs, slopes[segment_idx]
+
     def computewow_scaled(self, kind='linear'):
-        """Compute how much the line deviates fron expected,
+        """Compute how much the line deviates from expected,
            and scale input samples to output samples
         """
         if self.interpolated_pixel_locs is None:
-            actual_linelocs = np.array(self.linelocs, dtype=np.float64)
-            expected_linelocs = np.array([i * self.inlinelen for i in range(len(actual_linelocs))], dtype=np.float64)
+            actual_linelocs = np.asarray(self.linelocs, dtype=np.float64)
+            expected_linelocs = np.arange(actual_linelocs.shape[0], dtype=np.float64) * self.inlinelen
 
             outscale = self.inlinelen / self.outlinelen
             outsamples = self.outlinecount * self.outlinelen
             outline_offset = (self.lineoffset + 1) * self.outlinelen
 
-            if kind == 'linear':
-                k=1
-                bc_type=None
-            elif kind == 'quadratic':
-                k=2
-                bc_type=None
-            elif kind == 'cubic':
-                k=3
-                bc_type='natural'
-
-            # create a spline that interpolates the exact sample value based on expected vs. actual line locations
-            spl = interpolate.make_interp_spline(expected_linelocs, actual_linelocs, k=k, bc_type=bc_type, check_finite=False)
-
             # scale up to compute where the output pixel would fall on the interpolated line loc
             scaled_pixel_locs = np.arange(outsamples + outline_offset) * outscale
 
-            # interpolate the expected pixel location
-            self.interpolated_pixel_locs = spl(scaled_pixel_locs)
-            # amount of wow for each scaled pixel
-            self.wowfactors = spl(scaled_pixel_locs, 1)
+            if kind == 'linear':
+                self.interpolated_pixel_locs, self.wowfactors = self._computewow_linear(
+                    expected_linelocs,
+                    actual_linelocs,
+                    scaled_pixel_locs,
+                )
+            elif kind in {'quadratic', 'cubic'}:
+                k = 2 if kind == 'quadratic' else 3
+                bc_type = None if kind == 'quadratic' else 'natural'
+
+                # create a spline that interpolates the exact sample value based on expected vs. actual line locations
+                spl = interpolate.make_interp_spline(expected_linelocs, actual_linelocs, k=k, bc_type=bc_type, check_finite=False)
+
+                # interpolate the expected pixel location
+                self.interpolated_pixel_locs = spl(scaled_pixel_locs)
+                # amount of wow for each scaled pixel
+                self.wowfactors = spl(scaled_pixel_locs, 1)
+            else:
+                raise ValueError(f"Unsupported interpolation kind: {kind}")
 
         return self.interpolated_pixel_locs, self.wowfactors
 

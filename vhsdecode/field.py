@@ -22,23 +22,6 @@ from vhsdecode.debug_plot import plot_data_and_pulses
 
 NO_PULSES_FOUND = 1
 
-# def ynr(data, hpfdata, line_len):
-#     """Dumb vcr-line ynr
-#     """
-
-#     numlines = len(data) // line_len
-#     hpfdata = np.clip(hpfdata, -7000, 7000)
-#     for line_num in range(16, numlines - 2):
-#         delayed1h = hpfdata[(line_num - 1) * line_len : (line_num) * line_len]
-#         line_slice = hpfdata[line_num * line_len : (line_num + 1) * line_len]
-#         adv1h = hpfdata[(line_num + 1) * line_len : (line_num + 2) * line_len]
-#         # Let the delayed signal contribute 1/3.
-#         # Could probably make the filtering configurable later.
-#         data[line_num * line_len : (line_num + 1) * line_len] -= line_slice
-#         data[line_num * line_len : (line_num + 1) * line_len] += (((delayed1h + line_slice + adv1h) / 3) - line_slice)
-#     return data
-
-
 # Can't use numba here due to clip being a recent addition.
 # @njit(cache=True)
 def y_comb(data, line_len, limit):
